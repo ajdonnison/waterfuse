@@ -108,6 +108,7 @@ printLog(int level, const char * fmt, ...) {
   va_start(args, fmt);
   vprintf(fmt, args);
   va_end(args);
+  fflush(stdout);
 }
 
 void
@@ -130,6 +131,22 @@ signalHandler(int sig) {
   }
 }
 
+void
+createPidFile(void) {
+  int pid;
+  FILE * pidfile;
+  struct stat st;
+
+  pid = getpid();
+  if (stat("/var/run/waterfuse", &st) < 0) {
+    mkdir("/var/run/waterfuse", 0755);
+  }
+
+  pidfile = fopen("/var/run/waterfuse/waterfuse.pid", "w");
+  fprintf(pidfile, "%d\n", pid);
+  fclose(pidfile);
+}
+
 int
 main(int argc, char **argv) {
   unsigned int litres = 0;
@@ -139,8 +156,6 @@ main(int argc, char **argv) {
   struct sigaction sa;
   int total_litres;
   int pressure;
-  FILE * pidfile;
-  int pid;
 
   // Grab config from our config file first
   readConfig();
@@ -183,10 +198,7 @@ main(int argc, char **argv) {
   }
 
   // Create pidfile
-  pid = getpid();
-  pidfile = fopen("/var/run/waterfuse/waterfuse.pid", "w");
-  fprintf(pidfile, "%d\n", pid);
-  fclose(pidfile);
+  createPidFile();
 
 
   // Set up reset handler
