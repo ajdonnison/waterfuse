@@ -3,4 +3,4 @@ LDFLAGS = -lwiringPi
 ALL: waterfuse
 
 install: ALL
-	sudo cp waterfuse /usr/local/bin
+	sudo systemctl stop waterfuse && sudo cp waterfuse /usr/local/bin && sudo systemctl start waterfuse

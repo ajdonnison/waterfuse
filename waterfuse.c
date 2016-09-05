@@ -120,7 +120,7 @@ signalHandler(int sig) {
       readConfig();
       break;
     case SIGUSR1:
-      reset = 1;
+      reset = 2;
       break;
     case SIGUSR2:
       printLog(0,"last_click_time: %d seconds ago\n", now - last_click_time);
@@ -156,6 +156,7 @@ main(int argc, char **argv) {
   struct sigaction sa;
   int total_litres;
   int pressure;
+  char * reset_msg[3] = { "", "button", "signal" };
 
   // Grab config from our config file first
   readConfig();
@@ -252,14 +253,14 @@ main(int argc, char **argv) {
     printLog(3, "clicks: %d, litres: %d, triggered=%d, counting=%d, new=%d\n", clicks, litres, triggered, counting, new_clicks);
     if (reset) {
       triggered = 0;
-      reset = 0;
       clicks = 0;
       counting = 0;
       last_click_count = 0;
       new_clicks = 0;
       last_click_time = now;
       first_click_time = now;
-      printLog(2, "Turning pump on\n");
+      printLog(2, "Turning pump on after reset by %s\n", reset_msg[reset]);
+      reset = 0;
       digitalWrite(POWER_RELAY, HIGH);
     }
     if (!triggered) {
