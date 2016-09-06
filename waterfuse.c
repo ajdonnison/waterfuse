@@ -220,10 +220,12 @@ main(int argc, char **argv) {
 
   pinMode(RESET_BUTTON, INPUT);
   pullUpDnControl (RESET_BUTTON, PUD_UP);
+  /*
   if (wiringPiISR(RESET_BUTTON, INT_EDGE_FALLING, &handleReset) < 0) {
     fprintf(stderr, "Unable to create pushbutton interrupt: %s\n", strerror(errno));
     return 1;
   }
+  */
 
   // Set up output for relay and fire it up
   pinMode(POWER_RELAY, OUTPUT);
@@ -246,11 +248,11 @@ main(int argc, char **argv) {
     last_click_count = clicks;
     total_clicks += new_clicks;
     total_litres = total_clicks / clicks_per_litre;
-    if (total_litres && ((total_litres % 100) == 0)) {
-      printLog(2, "Total Litres consumed: %d\n", total_litres);
-    }
     litres = clicks / clicks_per_litre;
     printLog(3, "clicks: %d, litres: %d, triggered=%d, counting=%d, new=%d\n", clicks, litres, triggered, counting, new_clicks);
+    if (triggered && digitalRead(RESET_BUTTON) == 0) {
+      reset = 1;
+    }
     if (reset) {
       triggered = 0;
       clicks = 0;
