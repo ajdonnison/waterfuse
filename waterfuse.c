@@ -74,7 +74,7 @@ readConfig(void) {
   if ((cfg = fopen("/etc/waterfuse/waterfuse.conf", "r")) != NULL) {
     while (fscanf(cfg, "%s %d", &buf, &val) != EOF) {
       if (strcmp("reset_period", buf) == 0) {
-        reset_period = val * 60;
+        reset_period = val;
       } else if (strcmp("max_time", buf) == 0) {
         time_limit = val * 60;
       } else if (strcmp("max_litres", buf) == 0) {
@@ -112,21 +112,36 @@ printLog(int level, const char * fmt, ...) {
 }
 
 void
-signalHandler(int sig) {
+showStats(int level) {
   int now;
   now = time(0);
+  printLog(level, "last_click_time: %d seconds ago\n", now - last_click_time);
+  printLog(level, "first_click_time: %d seconds ago\n", now - first_click_time);
+  printLog(level, "last_click_count: %d\n", last_click_count);
+  printLog(level, "total_litres: %d\n", total_clicks / clicks_per_litre);
+}
+
+void
+showConfig(void) {
+  printLog(0, "reset_period: %d\n", reset_period);
+  printLog(0, "time_limit: %d\n", time_limit);
+  printLog(0, "max_litres: %d\n", max_litres);
+  printLog(0, "clicks_per_litre: %d\n", clicks_per_litre);
+  printLog(0, "verbose: %d\n", verbose);
+}
+
+void
+signalHandler(int sig) {
   switch (sig) {
     case SIGHUP:
+      rollLog();
       readConfig();
       break;
     case SIGUSR1:
       reset = 2;
       break;
     case SIGUSR2:
-      printLog(0,"last_click_time: %d seconds ago\n", now - last_click_time);
-      printLog(0,"first_click_time: %d seconds ago\n", now - first_click_time);
-      printLog(0,"last_click_count: %d\n", last_click_count);
-      printLog(0,"total_litres: %d\n", total_clicks / clicks_per_litre);
+      showStats(0);
       break;
   }
 }
@@ -174,7 +189,7 @@ main(int argc, char **argv) {
         time_limit = atoi(optarg) * 60;
 	break;
       case 'r':
-        reset_period = atoi(optarg) * 60;
+        reset_period = atoi(optarg);
 	break;
       case 'd':
         daemonise = 0;
@@ -185,18 +200,16 @@ main(int argc, char **argv) {
     }
   }
 
-  // Display config
-  printLog(1, "clicks_per_litre=%d\n", clicks_per_litre);
-  printLog(1, "max_litres=%d\n", max_litres);
-  printLog(1, "reset_period=%d\n", reset_period);
-  printLog(1, "time_limit=%d\n", time_limit);
-
   // Now we switch to daemon;
   if (daemonise) {
     close(0);
     rollLog();
     daemon(1, 1);
   }
+
+  // And print out our config
+  printLog(0, "Starting\n");
+  showConfig();
 
   // Create pidfile
   createPidFile();
@@ -278,7 +291,8 @@ main(int argc, char **argv) {
 	  seconds_from_first = last_click_time - first_click_time;
 	  if (litres > max_litres || seconds_from_first > time_limit)  {
 	    triggered = 1;
-	    printLog(2,"Turning pump off\n");
+	    printLog(2,"Turning pump off: litres = %d, seconds = %d\n", litres, seconds_from_first);
+	    showStats(2);
 	    digitalWrite(POWER_RELAY, LOW);
 	  }
 	}
