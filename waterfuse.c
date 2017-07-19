@@ -143,7 +143,11 @@ signalHandler(int sig) {
     case SIGUSR2:
       showStats(0);
       break;
-  }
+    case SIGCONT:
+      digitalWrite(POWER_RELAY, LOW);
+      triggered=1;
+      break;
+    }
 }
 
 void
@@ -221,6 +225,7 @@ main(int argc, char **argv) {
   sigaction(SIGHUP, &sa, NULL);
   sigaction(SIGUSR1, &sa, NULL);
   sigaction(SIGUSR2, &sa, NULL);
+  sigaction(SIGCONT, &sa, NULL);
 
   // Later versions die internally, no need to check result
   wiringPiSetup();
