@@ -112,6 +112,19 @@ printLog(int level, const char * fmt, ...) {
 }
 
 void
+writeState(const char * fmt, ...) {
+  va_list args;
+  char buf[1024];
+  FILE * statefile;
+
+  statefile = fopen("/var/un/waterfuse/waterfuse.state", "w");
+  va_start(args, fmt);
+  vfprintf(statefile, fmt, args);
+  va_end(args);
+  fclose(statefile);
+}
+
+void
 showStats(int level) {
   int now;
   now = time(0);
@@ -169,6 +182,7 @@ createPidFile(void) {
 int
 main(int argc, char **argv) {
   unsigned int litres = 0;
+  int stop_reason = 0;
   int opt;
   int now;
   int seconds_from_first, seconds, time_periods, new_clicks;
@@ -176,6 +190,7 @@ main(int argc, char **argv) {
   int total_litres;
   int pressure;
   char * reset_msg[3] = { "", "button", "signal" };
+  char * stop_msg[3] = { "", "volume", "time" };
 
   // Grab config from our config file first
   readConfig();
@@ -213,6 +228,7 @@ main(int argc, char **argv) {
 
   // And print out our config
   printLog(0, "Starting\n");
+  writeState("started\tstartup\n");
   showConfig();
 
   // Create pidfile
@@ -280,6 +296,7 @@ main(int argc, char **argv) {
       last_click_time = now;
       first_click_time = now;
       printLog(2, "Turning pump on after reset by %s\n", reset_msg[reset]);
+      writeState("started\t%s\n", reset_msg[reset]);
       reset = 0;
       digitalWrite(POWER_RELAY, HIGH);
     }
@@ -294,9 +311,17 @@ main(int argc, char **argv) {
 	} else {
 	  last_click_time = now;
 	  seconds_from_first = last_click_time - first_click_time;
-	  if (litres > max_litres || seconds_from_first > time_limit)  {
+          stop_reason = 0;
+          if (litres > max_litres) {
+            stop_reason = 1;
+          }
+          if (seconds_from_first > time_limit) {
+            stop_reason = 2;
+          }
+          if (stop_reason) {
 	    triggered = 1;
-	    printLog(2,"Turning pump off: litres = %d, seconds = %d\n", litres, seconds_from_first);
+	    printLog(2,"Turning pump off (%s) litres:%d, seconds:%d\n", stop_msg[stop_reason], litres, seconds_from_first);
+            writeState("stopped\t%s\n", stop_msg[stop_reason]);
 	    showStats(2);
 	    digitalWrite(POWER_RELAY, LOW);
 	  }
@@ -311,6 +336,8 @@ main(int argc, char **argv) {
     }
     delay(1000);
   }
+
+  writeState("stopped\tshutdown\n");
 
   return 0;
 }
