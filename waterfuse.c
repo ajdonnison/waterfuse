@@ -117,7 +117,7 @@ writeState(const char * fmt, ...) {
   char buf[1024];
   FILE * statefile;
 
-  statefile = fopen("/var/un/waterfuse/waterfuse.state", "w");
+  statefile = fopen("/var/run/waterfuse/waterfuse.state", "w");
   va_start(args, fmt);
   vfprintf(statefile, fmt, args);
   va_end(args);
