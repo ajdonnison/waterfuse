@@ -117,7 +117,7 @@ writeState(const char * fmt, ...) {
   char buf[1024];
   FILE * statefile;
 
-  statefile = fopen("/var/run/waterfuse/waterfuse.state", "w");
+  statefile = fopen("/run/waterfuse/waterfuse.state", "w");
   va_start(args, fmt);
   vfprintf(statefile, fmt, args);
   va_end(args);
@@ -166,15 +166,19 @@ signalHandler(int sig) {
 void
 createPidFile(void) {
   int pid;
+  int err;
   FILE * pidfile;
   struct stat st;
 
-  pid = getpid();
-  if (stat("/var/run/waterfuse", &st) < 0) {
-    mkdir("/var/run/waterfuse", 0755);
-  }
+  fprintf(stderr, "creating pid file\n");
+  fflush(stderr);
 
-  pidfile = fopen("/var/run/waterfuse/waterfuse.pid", "w");
+  pid = getpid();
+  err = mkdir("/run/waterfuse", 0755);
+  fprintf(stderr, "mkdir returns %d\n", err);
+  fflush(stderr);
+
+  pidfile = fopen("/run/waterfuse/waterfuse.pid", "w");
   fprintf(pidfile, "%d\n", pid);
   fclose(pidfile);
 }
@@ -226,14 +230,13 @@ main(int argc, char **argv) {
     daemon(1, 1);
   }
 
+  // Create pidfile
+  createPidFile();
+
   // And print out our config
   printLog(0, "Starting\n");
   writeState("started\tstartup\n");
   showConfig();
-
-  // Create pidfile
-  createPidFile();
-
 
   // Set up reset handler
   sa.sa_handler = signalHandler;
