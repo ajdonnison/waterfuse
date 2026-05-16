@@ -74,7 +74,7 @@ Node.js script (`index.js`) that watches `/run/waterfuse/` with `fs.watch` and b
 
 ```bash
 # Generate a TOTP secret
-node -e "const {Secret}=require('otpauth'); console.log(Secret.generate().base32)"
+node -e "const {Secret}=require('otpauth'); const s=new Secret(); console.log(s.base32)"
 
 cd notifier
 npm install
