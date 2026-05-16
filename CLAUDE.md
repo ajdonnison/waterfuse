@@ -65,18 +65,27 @@ State file format (two tab-separated words): `started\t<reason>` or `stopped\t<r
 
 ### `notifier/` — Telegram notification service
 
-Node.js script (`index.js`) that watches `/run/waterfuse/` with `fs.watch` and posts to a Telegram chat when the state file changes. Also supports bot commands via long polling.
+Node.js script (`index.js`) that watches `/run/waterfuse/` with `fs.watch` and broadcasts to all authorized Telegram chats when the state file changes. Commands are received via long polling.
 
-Required environment variables: `telegramToken` (bot token from BotFather), `telegramChatId` (numeric chat ID of the target chat).
+**Environment variables:**
+- `telegramToken` — bot token from BotFather (required)
+- `totpSecret` — base32-encoded TOTP secret shared with authorized users (required)
+- `authFile` — path to persist authorized chat IDs (default: `/etc/waterfuse/authorized_chats.json`)
 
 ```bash
+# Generate a TOTP secret
+node -e "const {Secret}=require('otpauth'); console.log(Secret.generate().base32)"
+
 cd notifier
 npm install
-telegramToken=123:ABC telegramChatId=-100... node index.js
+telegramToken=123:ABC totpSecret=BASE32SECRET node index.js
+# On startup, prints an otpauth:// URI — scan it with any authenticator app
 ```
 
-**Bot commands** (only accepted from the configured `telegramChatId`):
-- `/reset` — sends `SIGUSR1` to the daemon; clears the stop condition and restarts the pump
-- `/usage` — sends `SIGUSR2` to the daemon, tails the log to read `total_litres`, and reports accumulated pump run time
+**Bot commands:**
+- `/auth <code>` — validates a TOTP code; on success adds the sender to the authorized set (available to anyone)
+- `/deauth` — removes the sender from the authorized set
+- `/reset` — sends `SIGUSR1` to the daemon to clear the stop condition and restart the pump (authorized only)
+- `/usage` — sends `SIGUSR2` to the daemon, tails the log for `total_litres`, and reports accumulated pump run time (authorized only)
 
-Run-time tracking (`pumpStartTime`, `accumulatedRunMs`) is held in process memory; it seeds from the current state file at startup to survive restarts, but accumulated cross-session totals reset if the notifier is restarted.
+Unauthorized senders are silently ignored for all commands except `/auth`. Authorized chat IDs are persisted to `authFile` and loaded on startup. Run-time accumulation (`pumpStartTime`, `accumulatedRunMs`) seeds from the current state file on startup but resets if the notifier process is restarted.

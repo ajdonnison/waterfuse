@@ -4,23 +4,78 @@ const fs = require('fs')
 const path = require('path')
 const { execSync } = require('child_process')
 const axios = require('axios')
+const { TOTP, Secret } = require('otpauth')
 
-const token = process.env.telegramToken
-const chatId = process.env.telegramChatId
+const telegramToken = process.env.telegramToken
+const totpSecret = process.env.totpSecret
+const authFile = process.env.authFile || '/etc/waterfuse/authorized_chats.json'
 const stateDir = '/run/waterfuse'
 const stateFile = 'waterfuse.state'
 const pidFile = path.join(stateDir, 'waterfuse.pid')
 const logFile = '/var/log/waterfuse.log'
 
-const api = `https://api.telegram.org/bot${token}`
+if (!telegramToken || !totpSecret) {
+  console.error('telegramToken and totpSecret environment variables are required')
+  process.exit(1)
+}
+
+const api = `https://api.telegram.org/bot${telegramToken}`
 let pollOffset = 0
+
+const totp = new TOTP({
+  issuer: 'WaterFuse',
+  label: 'WaterFuse',
+  secret: Secret.fromBase32(totpSecret)
+})
+
+// Print setup URI on startup so the admin can add it to authenticator apps
+console.log('Authenticator setup URI:', totp.toString())
+
+// ---- authorized chats -------------------------------------------------------
+
+let authorizedChats = new Set()
+
+function loadAuth() {
+  try {
+    const data = JSON.parse(fs.readFileSync(authFile, 'utf8'))
+    authorizedChats = new Set(data)
+    console.log(`Loaded ${authorizedChats.size} authorized chat(s)`)
+  } catch (_) {}
+}
+
+function saveAuth() {
+  try {
+    fs.writeFileSync(authFile, JSON.stringify([...authorizedChats]))
+  } catch (err) {
+    console.error('Failed to save auth file:', err.message)
+  }
+}
+
+loadAuth()
+
+// ---- Telegram helpers -------------------------------------------------------
+
+async function sendMessage(chatId, text) {
+  await axios.post(`${api}/sendMessage`, {
+    chat_id: chatId,
+    text,
+    parse_mode: 'Markdown'
+  })
+}
+
+async function broadcast(text) {
+  for (const chatId of authorizedChats) {
+    await sendMessage(chatId, text)
+      .catch(err => console.error(`Broadcast to ${chatId} failed:`, err.message))
+  }
+}
+
+// ---- state tracking ---------------------------------------------------------
 
 let fileContents = ''
 let oldContents = ''
 let pumpStartTime = null   // Date.now() when pump last started
 let accumulatedRunMs = 0   // run time accrued from completed sessions
-
-// ---- helpers ----------------------------------------------------------------
 
 function formatDuration(ms) {
   const s = Math.floor(ms / 1000)
@@ -42,16 +97,6 @@ function getDaemonPid() {
   return parseInt(fs.readFileSync(pidFile, 'utf8').trim(), 10)
 }
 
-async function sendMessage(cid, text) {
-  await axios.post(`${api}/sendMessage`, {
-    chat_id: cid,
-    text,
-    parse_mode: 'Markdown'
-  })
-}
-
-// ---- state tracking ---------------------------------------------------------
-
 function applyState(contents) {
   const [status] = contents.split(/\s+/)
   if (status === 'started') {
@@ -69,9 +114,8 @@ try {
   oldContents = init
   const [status] = init.split(/\s+/)
   if (status === 'started') pumpStartTime = Date.now()
-} catch (_) { /* state file may not exist yet */ }
+} catch (_) {}
 
-// Watch for changes and notify Telegram
 fs.watch(stateDir, (type, fname) => {
   if (type === 'change' && fname === stateFile) {
     fs.readFile(path.join(stateDir, stateFile), (err, data) => {
@@ -86,32 +130,55 @@ setInterval(() => {
   applyState(fileContents)
 
   const [status, reason] = fileContents.split(/\s+/)
-  const message = `*Pump Status Changed*\nPump is now *${status}*\nReason: ${reason}`
-  sendMessage(chatId, message)
-    .catch(err => console.error('Notification failed:', err.message))
+  broadcast(`*Pump Status Changed*\nPump is now *${status}*\nReason: ${reason}`)
 }, 10)
 
 // ---- command handling -------------------------------------------------------
 
 async function handleUpdate(update) {
   const msg = update.message
-  if (!msg || !msg.text || String(msg.chat.id) !== String(chatId)) return
+  if (!msg || !msg.text) return
 
+  const chatId = String(msg.chat.id)
   const text = msg.text.trim()
+
+  // /auth is open to anyone
+  if (text.startsWith('/auth')) {
+    const code = text.split(/\s+/)[1] || ''
+    const delta = totp.validate({ token: code, window: 1 })
+    if (delta !== null) {
+      authorizedChats.add(chatId)
+      saveAuth()
+      await sendMessage(chatId, 'Authorized. You will now receive pump status updates.')
+    } else {
+      await sendMessage(chatId, 'Invalid code.')
+    }
+    return
+  }
+
+  // All other commands require authorization — silently ignore unauthorized senders
+  if (!authorizedChats.has(chatId)) return
+
+  if (text === '/deauth') {
+    authorizedChats.delete(chatId)
+    saveAuth()
+    await sendMessage(chatId, 'You have been removed from the authorized list.')
+    return
+  }
 
   if (text === '/reset') {
     try {
       process.kill(getDaemonPid(), 'SIGUSR1')
-      await sendMessage(msg.chat.id, 'Reset signal sent — pump should restart.')
+      await sendMessage(chatId, 'Reset signal sent — pump should restart.')
     } catch (err) {
-      await sendMessage(msg.chat.id, `Reset failed: ${err.message}`)
+      await sendMessage(chatId, `Reset failed: ${err.message}`)
     }
+    return
   }
 
   if (text === '/usage') {
     try {
       process.kill(getDaemonPid(), 'SIGUSR2')
-      // Give the daemon a moment to flush stats to the log
       await new Promise(resolve => setTimeout(resolve, 500))
 
       const log = execSync(`tail -20 "${logFile}"`).toString()
@@ -120,12 +187,13 @@ async function handleUpdate(update) {
         ? matches[matches.length - 1].replace('total_litres: ', '')
         : 'unknown'
 
-      await sendMessage(msg.chat.id,
+      await sendMessage(chatId,
         `*Water Usage*\nTotal litres: ${litres} L\nPump run time: ${currentRuntime()}`
       )
     } catch (err) {
-      await sendMessage(msg.chat.id, `Usage query failed: ${err.message}`)
+      await sendMessage(chatId, `Usage query failed: ${err.message}`)
     }
+    return
   }
 }
 
