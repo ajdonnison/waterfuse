@@ -63,16 +63,20 @@ Single-file C program. Key design points:
 
 State file format (two tab-separated words): `started\t<reason>` or `stopped\t<reason>`.
 
-### `notifier/` — Slack notification service
+### `notifier/` — Telegram notification service
 
-Node.js script (`index.js`) that watches `/var/run/waterfuse/` with `fs.watch` and posts to Slack via `@slack/web-api` when the state file changes.
+Node.js script (`index.js`) that watches `/run/waterfuse/` with `fs.watch` and posts to a Telegram chat when the state file changes. Also supports bot commands via long polling.
 
-Required environment variables: `slackToken`, `slackChannel`.
+Required environment variables: `telegramToken` (bot token from BotFather), `telegramChatId` (numeric chat ID of the target chat).
 
 ```bash
 cd notifier
 npm install
-slackToken=xoxb-... slackChannel=C... node index.js
+telegramToken=123:ABC telegramChatId=-100... node index.js
 ```
 
-Note: the notifier currently has a bug — `stateFile` is hardcoded as `'waterfuse.state'` but the daemon writes to `/run/waterfuse/waterfuse.state`; the notifier watches `/var/run/waterfuse` (these resolve to the same path on most Linux systems via symlink, but is worth verifying on the target Pi).
+**Bot commands** (only accepted from the configured `telegramChatId`):
+- `/reset` — sends `SIGUSR1` to the daemon; clears the stop condition and restarts the pump
+- `/usage` — sends `SIGUSR2` to the daemon, tails the log to read `total_litres`, and reports accumulated pump run time
+
+Run-time tracking (`pumpStartTime`, `accumulatedRunMs`) is held in process memory; it seeds from the current state file at startup to survive restarts, but accumulated cross-session totals reset if the notifier is restarted.
