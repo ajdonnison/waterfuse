@@ -2,9 +2,14 @@
 
 const fs = require('fs')
 const path = require('path')
+const https = require('https')
 const { execSync } = require('child_process')
 const axios = require('axios')
 const { TOTP, Secret } = require('otpauth')
+
+// Force IPv4 — Node 18+ happy-eyeballs tries IPv6 first, which times out
+// on networks where IPv6 routing to api.telegram.org isn't available
+const httpsAgent = new https.Agent({ family: 4 })
 
 const telegramToken = process.env.telegramToken
 const totpSecret = process.env.totpSecret
@@ -31,6 +36,10 @@ const totp = new TOTP({
 // Print setup URI on startup so the admin can add it to authenticator apps
 console.log('Authenticator setup URI:', totp.toString())
 
+function errMsg(err) {
+  return err.message || err.code || String(err)
+}
+
 // ---- authorized chats -------------------------------------------------------
 
 let authorizedChats = new Set()
@@ -47,7 +56,7 @@ function saveAuth() {
   try {
     fs.writeFileSync(authFile, JSON.stringify([...authorizedChats]))
   } catch (err) {
-    console.error('Failed to save auth file:', err.message)
+    console.error('Failed to save auth file:', errMsg(err))
   }
 }
 
@@ -60,13 +69,13 @@ async function sendMessage(chatId, text) {
     chat_id: chatId,
     text,
     parse_mode: 'Markdown'
-  })
+  }, { httpsAgent })
 }
 
 async function broadcast(text) {
   for (const chatId of authorizedChats) {
     await sendMessage(chatId, text)
-      .catch(err => console.error(`Broadcast to ${chatId} failed:`, err.message))
+      .catch(err => console.error(`Broadcast to ${chatId} failed:`, errMsg(err)))
   }
 }
 
@@ -171,7 +180,7 @@ async function handleUpdate(update) {
       process.kill(getDaemonPid(), 'SIGUSR1')
       await sendMessage(chatId, 'Reset signal sent — pump should restart.')
     } catch (err) {
-      await sendMessage(chatId, `Reset failed: ${err.message}`)
+      await sendMessage(chatId, `Reset failed: ${errMsg(err)}`)
     }
     return
   }
@@ -191,7 +200,7 @@ async function handleUpdate(update) {
         `*Water Usage*\nTotal litres: ${litres} L\nPump run time: ${currentRuntime()}`
       )
     } catch (err) {
-      await sendMessage(chatId, `Usage query failed: ${err.message}`)
+      await sendMessage(chatId, `Usage query failed: ${errMsg(err)}`)
     }
     return
   }
@@ -203,14 +212,15 @@ async function poll() {
     try {
       const res = await axios.get(`${api}/getUpdates`, {
         params: { offset: pollOffset, timeout: 30 },
-        timeout: 35000
+        timeout: 35000,
+        httpsAgent
       })
       for (const update of res.data.result) {
         pollOffset = update.update_id + 1
-        handleUpdate(update).catch(err => console.error('Handler error:', err.message))
+        handleUpdate(update).catch(err => console.error('Handler error:', errMsg(err)))
       }
     } catch (err) {
-      console.error('Poll error:', err.message)
+      console.error('Poll error:', errMsg(err))
       await new Promise(resolve => setTimeout(resolve, 5000))
     }
   }
