@@ -9,7 +9,7 @@ It was designed to run on a RaspberryPi and has been running for years on a mode
 
 - [WiringPi library](https://github.com/WiringPi/WiringPi)
 - [NodeJS](https://nodejs.org) - for the notifier
-- [Slack](https://slack.com) - for the notifier
+- [Telegram](https://telegram.org) - for the notifier
 - Water flow sensor - Hall Effect
 - Relay/relay driver (see below)
 
@@ -29,7 +29,7 @@ The code uses WiringPi pin numbering.
 
 ## Support files
 
-The `notifier` directory contains a nodeJS application that uses the Slack API to send a message when the fuse is triggered.  This is optional.
+The `notifier` directory contains a nodeJS application that uses the Telegram API to send a message when the fuse is triggered.  This is optional.
 
 The `rpi` directory contains system support files for the code running on the Pi (or indeed any systemd-based board).  The files are:
 - waterfuse.conf - a sample configuration file used to convert from ticks in the flow meter to litres, and other configurable items
