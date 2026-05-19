@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Overview
 
-Waterfuse is a Raspberry Pi water flow protection daemon. It monitors a flow meter via GPIO interrupt and cuts power to a water pump relay if flow exceeds configurable volume or time limits. A companion Node.js notifier posts state changes to Slack.
+Waterfuse is a Raspberry Pi water flow protection daemon. It monitors a flow meter via GPIO interrupt and cuts power to a water pump relay if flow exceeds configurable volume or time limits. A companion Node.js notifier posts state changes to Telegram.
 
 ## Build & Install
 
@@ -47,6 +47,20 @@ Config file: `/etc/waterfuse/waterfuse.conf` — key/value pairs, one per line:
 
 Config is re-read on `SIGHUP` (which also rolls the log).
 
+## Deployment support files (`rpi/`)
+
+The `rpi/` directory contains systemd unit files and config templates for deploying on the Pi:
+
+| File | Deploy to | Purpose |
+|------|-----------|---------|
+| `waterfuse.conf` | `/etc/waterfuse/waterfuse.conf` | Sample daemon config |
+| `waterfuse.default` | `/etc/default/waterfuse` | Notifier env vars (`telegramToken`, `totpSecret`, `waterfuseHome`) |
+| `waterfuse-monitor` | `/usr/local/bin/waterfuse-monitor` | Wrapper that sources `/etc/default/waterfuse` and launches the notifier |
+| `waterfuse.service` | `/etc/systemd/system/` | systemd unit for the daemon; expects binary at `/usr/local/bin/waterfuse` |
+| `waterfuse-monitor.service` | `/etc/systemd/system/` | systemd unit for the notifier; starts after `waterfuse.service` |
+
+To **disable** the daemon without removing the service, create `/etc/waterfuse/waterfuse.off` (the service has `ConditionPathExists=!/etc/waterfuse/waterfuse.off`).
+
 ## Architecture
 
 ### `waterfuse.c` — the main daemon
@@ -71,6 +85,8 @@ Node.js script (`index.js`) that watches `/run/waterfuse/` with `fs.watch` and b
 - `telegramToken` — bot token from BotFather (required)
 - `totpSecret` — base32-encoded TOTP secret shared with authorized users (required)
 - `authFile` — path to persist authorized chat IDs (default: `/etc/waterfuse/authorized_chats.json`)
+
+In production these are sourced from `/etc/default/waterfuse` (see `rpi/waterfuse.default`) by the `waterfuse-monitor` wrapper script, which is deployed to `/usr/local/bin/waterfuse-monitor` and managed by `waterfuse-monitor.service`.
 
 ```bash
 # Generate a TOTP secret
