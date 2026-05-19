@@ -1,0 +1,6 @@
+#!/bin/bash
+
+. /etc/default/waterfuse
+export telegramToken totpSecret
+
+node ${waterfuseHome}/notifier/index.js

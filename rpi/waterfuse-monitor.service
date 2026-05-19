@@ -1,0 +1,12 @@
+[Unit]
+Description=Water Fuse Monitor
+After=waterfuse.service
+
+[Service]
+Type=simple
+ExecStart=/usr/local/bin/waterfuse-monitor
+Restart=on-failure
+
+[Install]
+WantedBy=multi-user.target
+Alias=waterfuse-monitor.service

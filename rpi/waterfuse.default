@@ -1,0 +1,3 @@
+telegramToken={ Telegram Token }
+totpSecret={ TOTP secret }
+waterfuseHome={ Base directory to find waterfuse code }

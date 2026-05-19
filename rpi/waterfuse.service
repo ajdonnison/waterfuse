@@ -1,0 +1,16 @@
+[Unit]
+Description=Water Fuse
+After=network.target
+ConditionPathExists=!/etc/waterfuse/waterfuse.off
+
+[Service]
+Type=forking
+PIDFile=/run/waterfuse/waterfuse.pid
+ExecStart=/usr/local/bin/waterfuse
+ExecReload=/bin/kill -HUP $MAINPID
+KillMode=process
+Restart=on-failure
+
+[Install]
+WantedBy=multi-user.target
+Alias=waterfuse.service
