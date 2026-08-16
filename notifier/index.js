@@ -36,7 +36,7 @@ const totp = new TOTP({
 // Print setup URI on startup so the admin can add it to authenticator apps
 console.log('Authenticator setup URI:', totp.toString())
 
-function errMsg(err) {
+function errMsg (err) {
   return err.message || err.code || String(err)
 }
 
@@ -44,7 +44,7 @@ function errMsg(err) {
 
 let authorizedChats = new Set()
 
-function loadAuth() {
+function loadAuth () {
   try {
     const data = JSON.parse(fs.readFileSync(authFile, 'utf8'))
     authorizedChats = new Set(data)
@@ -52,7 +52,7 @@ function loadAuth() {
   } catch (_) {}
 }
 
-function saveAuth() {
+function saveAuth () {
   try {
     fs.writeFileSync(authFile, JSON.stringify([...authorizedChats]))
   } catch (err) {
@@ -64,7 +64,7 @@ loadAuth()
 
 // ---- Telegram helpers -------------------------------------------------------
 
-async function sendMessage(chatId, text) {
+async function sendMessage (chatId, text) {
   await axios.post(`${api}/sendMessage`, {
     chat_id: chatId,
     text,
@@ -72,7 +72,7 @@ async function sendMessage(chatId, text) {
   }, { httpsAgent })
 }
 
-async function broadcast(text) {
+async function broadcast (text) {
   for (const chatId of authorizedChats) {
     await sendMessage(chatId, text)
       .catch(err => console.error(`Broadcast to ${chatId} failed:`, errMsg(err)))
@@ -83,10 +83,10 @@ async function broadcast(text) {
 
 let fileContents = ''
 let oldContents = ''
-let pumpStartTime = null   // Date.now() when pump last started
-let accumulatedRunMs = 0   // run time accrued from completed sessions
+let pumpStartTime = null // Date.now() when pump last started
+let accumulatedRunMs = 0 // run time accrued from completed sessions
 
-function formatDuration(ms) {
+function formatDuration (ms) {
   const s = Math.floor(ms / 1000)
   const h = Math.floor(s / 3600)
   const m = Math.floor((s % 3600) / 60)
@@ -96,17 +96,17 @@ function formatDuration(ms) {
   return `${sec}s`
 }
 
-function currentRuntime() {
+function currentRuntime () {
   let ms = accumulatedRunMs
   if (pumpStartTime !== null) ms += Date.now() - pumpStartTime
   return formatDuration(ms)
 }
 
-function getDaemonPid() {
+function getDaemonPid () {
   return parseInt(fs.readFileSync(pidFile, 'utf8').trim(), 10)
 }
 
-function applyState(contents) {
+function applyState (contents) {
   const [status] = contents.split(/\s+/)
   if (status === 'started') {
     pumpStartTime = Date.now()
@@ -144,7 +144,7 @@ setInterval(() => {
 
 // ---- command handling -------------------------------------------------------
 
-async function handleUpdate(update) {
+async function handleUpdate (update) {
   const msg = update.message
   if (!msg || !msg.text) return
 
@@ -163,6 +163,20 @@ async function handleUpdate(update) {
       await sendMessage(chatId, 'Invalid code.')
     }
     return
+  }
+
+  // /help is also freely available
+  if (text === '/help') {
+    await sendMessage(chatId, [
+      'Waterfuse Telegram connector.',
+      '',
+      'Commands available:',
+      '/help - this command, display help message',
+      '/auth - authenticate, requires a TOTP token',
+      '/deauth - de-authenticate',
+      '/reset - re-enable flow after a stoppage',
+      '/usage - return the current usage stats of the pump'
+    ].join('\n'))
   }
 
   // All other commands require authorization — silently ignore unauthorized senders
@@ -202,12 +216,11 @@ async function handleUpdate(update) {
     } catch (err) {
       await sendMessage(chatId, `Usage query failed: ${errMsg(err)}`)
     }
-    return
   }
 }
 
 // Long-poll loop for incoming commands
-async function poll() {
+async function poll () {
   while (true) {
     try {
       const res = await axios.get(`${api}/getUpdates`, {

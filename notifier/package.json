@@ -4,12 +4,16 @@
   "description": "Notify waterfuse state changes via Telegram",
   "main": "index.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "lint": "standard --fix"
   },
   "author": "Adam Donnison <adam@saki.com.au>",
   "license": "ISC",
   "dependencies": {
     "axios": "^1.7.0",
     "otpauth": "^9.5.1"
+  },
+  "devDependencies": {
+    "standard": "^17.1.2"
   }
 }
